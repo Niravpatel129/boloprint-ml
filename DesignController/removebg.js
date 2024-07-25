@@ -23,33 +23,38 @@ async function removeBackground(inputImagePath, outputImagePath) {
   const { width, height } = await image.metadata();
 
   // Detect the subject (body)
-  const tensor = human.tf.node.decodeImage(imageBuffer, 3);
+  const tensor = human.tf.node.decodeImage(imageBuffer);
   const result = await human.detect(tensor);
-  tensor.dispose();
+  human.tf.dispose(tensor);
 
   // Create a mask based on detected body parts
-  const mask = new Uint8Array(width * height * 4);
+  const mask = new Uint8Array(width * height).fill(0);
   result.body.forEach((body) => {
     body.keypoints.forEach((point) => {
-      const x = Math.floor(point.position[0]);
-      const y = Math.floor(point.position[1]);
-      const idx = (y * width + x) * 4;
-      mask[idx] = 255; // R
-      mask[idx + 1] = 255; // G
-      mask[idx + 2] = 255; // B
-      mask[idx + 3] = 255; // A
+      const x = Math.floor(point.x * width);
+      const y = Math.floor(point.y * height);
+      const idx = y * width + x;
+      mask[idx] = 255;
     });
   });
 
   // Create a mask image
   const maskImage = sharp(Buffer.from(mask), {
-    raw: { width, height, channels: 4 },
+    raw: { width, height, channels: 1 },
   });
+
+  // Simulate dilation by applying a blur and threshold
+  const dilatedMask = await maskImage.blur(10).threshold(128).raw().toBuffer();
+
+  // Create a new sharp image from the dilated mask
+  const finalMaskImage = sharp(dilatedMask, {
+    raw: { width, height, channels: 1 },
+  }).resize(width, height);
 
   // Composite the original image with the mask to remove the background
   await image
-    .joinChannel(await maskImage.toBuffer(), { raw: { width, height, channels: 4 } })
-    .removeAlpha()
+    .composite([{ input: await finalMaskImage.png().toBuffer(), blend: 'dest-in' }])
+    .png()
     .toFile(outputImagePath);
 
   console.log(`Background removed. Output saved to ${outputImagePath}`);
