@@ -1,6 +1,10 @@
 const fs = require('fs');
+const path = require('path');
 const sharp = require('sharp');
 const Human = require('@vladmandic/human');
+const multer = require('multer');
+
+const upload = multer({ dest: 'uploads/' });
 
 async function removeBackground(inputImagePath, outputImagePath) {
   // Load and configure Human
@@ -51,6 +55,35 @@ async function removeBackground(inputImagePath, outputImagePath) {
   console.log(`Background removed. Output saved to ${outputImagePath}`);
 }
 
-const inputImagePath = 'path/to/your/input/image.jpg';
-const outputImagePath = 'path/to/your/output/image.png';
-removeBackground(inputImagePath, outputImagePath).catch(console.error);
+module.exports = [
+  upload.single('image'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No image file uploaded' });
+      }
+
+      const inputImagePath = req.file.path;
+      const outputFileName = `bg_removed_${Date.now()}.png`;
+      const outputImagePath = path.join('images', outputFileName);
+
+      // Ensure the images directory exists
+      if (!fs.existsSync('images')) {
+        fs.mkdirSync('images');
+      }
+
+      await removeBackground(inputImagePath, outputImagePath);
+
+      // Clean up the uploaded file
+      fs.unlinkSync(inputImagePath);
+
+      res.status(200).json({
+        message: 'Background removed successfully',
+        outputPath: outputImagePath,
+      });
+    } catch (error) {
+      console.error('Error removing background:', error);
+      res.status(500).json({ error: 'An error occurred while removing the background' });
+    }
+  },
+];
