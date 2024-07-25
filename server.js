@@ -7,10 +7,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.get('/', (req, res) => {
-  res.send('Hello World!');
-});
-
 app.get('/api/design/remove-background', require('./DesignController/removebg.js'));
 
 // Start the server
